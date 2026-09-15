@@ -1,0 +1,8 @@
+@extends('layouts.app')
+@section('title','Clientes | A&A')
+@section('heading','Gestión de clientes')
+@section('eyebrow','Información centralizada')
+@section('content')
+<div class="toolbar"><form class="searchbar"><input name="search" value="{{ request('search') }}" placeholder="Buscar por nombre o teléfono…"><button class="btn btn-outline">Buscar</button></form><button class="btn btn-primary" data-modal-open="#newCustomer">+ Nuevo cliente</button></div><section class="card"><div class="table-wrap"><table><thead><tr><th>Cliente</th><th>Contacto</th><th>Dirección</th><th>Pedidos</th><th>Estado</th><th></th></tr></thead><tbody>@foreach($customers as $c)<tr><td><strong>{{ $c->name }}</strong><div class="muted">Cliente desde {{ $c->created_at->format('m/Y') }}</div></td><td>{{ $c->phone }}<div class="muted">{{ $c->email }}</div></td><td>{{ $c->address ?? '—' }}</td><td><strong>{{ $c->orders_count }}</strong></td><td><span class="status {{ $c->active?'delivered':'cancelled' }}">{{ $c->active?'Activo':'Inactivo' }}</span></td><td><button class="btn btn-outline btn-sm" data-modal-open="#customer{{ $c->id }}">Editar</button></td></tr>@endforeach</tbody></table></div><div class="pagination">{{ $customers->links() }}</div></section>
+<dialog id="newCustomer"><form method="post" action="{{ route('customers.store') }}" class="modal-body">@csrf @include('customers.partials.form',['customer'=>null])</form></dialog>@foreach($customers as $c)<dialog id="customer{{ $c->id }}"><form method="post" action="{{ route('customers.update',$c) }}" class="modal-body">@csrf @method('PUT') @include('customers.partials.form',['customer'=>$c])</form></dialog>@endforeach
+@endsection
