@@ -1,7 +1,6 @@
 <?php
 namespace App\Http\Controllers;
 
-use App\Models\Material;
 use App\Models\Order;
 use App\Models\OrderStatusHistory;
 use App\Models\ProductionTask;
@@ -11,6 +10,7 @@ use App\Services\OrderEmailService;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Auth;
 use Illuminate\Support\Str;
+use Illuminate\Validation\Rule;
 
 class OrderController extends Controller
 {
@@ -18,6 +18,9 @@ class OrderController extends Controller
     {
         $query = Order::with(['client','service','material'])->latest();
         if (Auth::user()->role === 'client') $query->where('client_id', Auth::id());
+        if (Auth::user()->role === 'worker') {
+            $query->whereHas('tasks', fn ($tasks) => $tasks->where('assigned_to', Auth::id()));
+        }
         if ($request->filled('status')) $query->where('status', $request->status);
         if ($request->filled('search')) $query->where(function ($q) use ($request) {
             $q->where('code', 'like', '%'.$request->search.'%')->orWhere('furniture_type', 'like', '%'.$request->search.'%')->orWhereHas('client', fn($c) => $c->where('name','like','%'.$request->search.'%'));
@@ -27,7 +30,10 @@ class OrderController extends Controller
 
     public function create()
     {
-        return view('orders.form', ['clients' => User::where('role','client')->where('active',true)->orderBy('name')->get(), 'services' => Service::where('active',true)->get(), 'materials' => Material::where('active',true)->get()]);
+        return view('orders.form', [
+            'clients' => User::where('role', 'client')->where('active', true)->orderBy('name')->get(),
+            'services' => Service::where('active', true)->get(),
+        ]);
     }
 
     public function store(Request $request, OrderEmailService $emails)
@@ -55,9 +61,38 @@ class OrderController extends Controller
     public function show(Order $order)
     {
         if (Auth::user()->role === 'client') abort_unless($order->client_id === Auth::id(), 403);
+        if (Auth::user()->role === 'worker') {
+            abort_unless($order->tasks()->where('assigned_to', Auth::id())->exists(), 403);
+        }
         $order->load(['client','service','material','aiDesign','tasks.worker','history.user']);
-        $workers = User::where('role','worker')->where('active',true)->get();
+        $workers = Auth::user()->role === 'admin'
+            ? User::where('role','worker')->where('active',true)->orderBy('name')->get()
+            : collect();
         return view('orders.show', compact('order','workers'));
+    }
+
+    public function assign(Request $request, Order $order)
+    {
+        $data = $request->validate([
+            'worker_id' => [
+                'required',
+                Rule::exists('users', 'id')->where(
+                    fn ($query) => $query->where('role', 'worker')->where('active', true)
+                ),
+            ],
+        ]);
+
+        $worker = User::findOrFail($data['worker_id']);
+        $assigned = $order->tasks()
+            ->where('status', '!=', 'completed')
+            ->update(['assigned_to' => $worker->id]);
+
+        return back()->with(
+            'success',
+            $assigned > 0
+                ? "Trabajo asignado a {$worker->name}. Se repartieron {$assigned} etapas pendientes."
+                : 'No hay etapas pendientes para asignar.'
+        );
     }
 
     public function update(Request $request, Order $order)
@@ -91,7 +126,7 @@ class OrderController extends Controller
         return $request->validate([
             'client_id'=>['required','exists:users,id'], 'service_id'=>['required','exists:services,id'], 'material_id'=>['nullable','exists:materials,id'],
             'status'=>['required','in:pending,confirmed,in_progress,quality,ready,delivered,cancelled'], 'priority'=>['required','in:normal,high,urgent'],
-            'furniture_type'=>['required','string','max:100'], 'style'=>['nullable','string','max:80'], 'primary_color'=>['nullable','string','max:50'],
+            'furniture_type'=>['required','string','max:100'], 'quantity'=>['nullable','integer','min:1','max:100'], 'style'=>['nullable','string','max:80'], 'primary_color'=>['nullable','string','max:50'],
             'dimensions'=>['nullable','string','max:100'], 'description'=>['required','string','max:1500'], 'requested_date'=>['nullable','date'], 'delivery_date'=>['nullable','date'],
             'subtotal'=>['required','numeric','min:0'], 'discount'=>['nullable','numeric','min:0'], 'advance'=>['nullable','numeric','min:0'], 'internal_notes'=>['nullable','string','max:1000'],
         ]);

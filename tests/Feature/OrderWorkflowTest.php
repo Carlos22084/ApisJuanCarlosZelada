@@ -27,7 +27,7 @@ class OrderWorkflowTest extends TestCase
 
         $response = $this->post('/cotizacion', $this->validQuoteData());
 
-        $response->assertRedirect(route('login'));
+        $response->assertRedirect(route('client.login'));
         $response->assertSessionHas('info');
         $this->assertSame($ordersBefore, Order::count());
     }
@@ -46,8 +46,9 @@ class OrderWorkflowTest extends TestCase
         $response->assertRedirect(route('orders.show', $order));
         $response->assertSessionHas('success');
         $this->assertSame($client->id, $order->client_id);
+        $this->assertSame(2, $order->quantity);
         $this->assertSame('pending', $order->status);
-        $this->assertEquals((float) $service->base_price, (float) $order->total);
+        $this->assertEquals((float) $service->base_price * 2, (float) $order->total);
         $this->assertSame(5, $order->tasks()->count());
         $this->assertSame([1, 2, 3, 4, 5], $order->tasks()->pluck('sequence')->all());
         $this->assertDatabaseHas('order_status_histories', [
@@ -89,7 +90,6 @@ class OrderWorkflowTest extends TestCase
 
         $response = $this->actingAs($worker)->patch(route('tasks.update', $task), [
             'status' => 'in_progress',
-            'assigned_to' => $worker->id,
             'notes' => 'Inicio registrado por la prueba automatizada.',
         ]);
 
@@ -113,6 +113,57 @@ class OrderWorkflowTest extends TestCase
         ])->assertForbidden();
 
         $this->assertSame($statusBefore, $task->fresh()->status);
+    }
+
+    public function test_order_progress_advances_according_to_completed_production_stages(): void
+    {
+        $order = Order::where('status', 'confirmed')->firstOrFail();
+        $tasks = $order->tasks()->get();
+
+        $this->assertCount(5, $tasks);
+        $this->assertSame(0, $order->progress);
+
+        foreach ($tasks as $index => $task) {
+            $task->update([
+                'status' => 'completed',
+                'completed_at' => now(),
+            ]);
+
+            $this->assertSame(($index + 1) * 20, $order->fresh()->progress);
+        }
+    }
+
+    public function test_worker_can_see_dates_and_duration_of_the_five_production_stages(): void
+    {
+        $worker = User::where('email', 'trabajador@aya.bo')->firstOrFail();
+        $order = Order::whereHas('tasks', fn ($query) => $query->where('assigned_to', $worker->id))
+            ->with('service')
+            ->firstOrFail();
+        $task = $order->tasks()->firstOrFail();
+        $startedAt = now()->subDay()->startOfDay()->setTime(17, 0);
+        $completedAt = $startedAt->copy()->addDay()->setTime(9, 30);
+
+        $task->update([
+            'status' => 'completed',
+            'started_at' => $startedAt,
+            'completed_at' => $completedAt,
+        ]);
+
+        $this->actingAs($worker)
+            ->get(route('orders.show', $order))
+            ->assertOk()
+            ->assertSee('Historial de producción')
+            ->assertSee('Tiempo estimado')
+            ->assertSee('Horario contabilizado: 08:00 a 18:00.')
+            ->assertSee($startedAt->format('d/m/Y'))
+            ->assertSee($completedAt->format('d/m/Y'))
+            ->assertDontSee($startedAt->format('d/m/Y H:i'))
+            ->assertDontSee($completedAt->format('d/m/Y H:i'))
+            ->assertSee($task->estimatedDurationFor($order->quantity))
+            ->assertSee('2 h 30 min');
+
+        $this->assertSame('1 día laboral', $task->estimatedDurationFor(1));
+        $this->assertSame('2 días laborales', $task->estimatedDurationFor(2));
     }
 
     public function test_invalid_order_data_is_rejected_without_writing_to_database(): void
@@ -157,7 +208,7 @@ class OrderWorkflowTest extends TestCase
             'furniture_type' => 'Sofá de tres plazas',
             'style' => 'Contemporáneo',
             'primary_color' => 'Arena',
-            'dimensions' => '210 x 90 cm',
+            'quantity' => 2,
             'description' => 'Solicitud completa para verificar el flujo automatizado de cotización.',
             'requested_date' => now()->addWeek()->toDateString(),
         ], $overrides);

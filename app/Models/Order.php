@@ -11,6 +11,25 @@ class Order extends Model
     public function aiDesign() { return $this->belongsTo(AiDesign::class); }
     public function tasks() { return $this->hasMany(ProductionTask::class)->orderBy('sequence'); }
     public function history() { return $this->hasMany(OrderStatusHistory::class)->latest(); }
-    public function getProgressAttribute(): int { return match ($this->status) { 'pending' => 10, 'confirmed' => 25, 'in_progress' => 55, 'quality' => 75, 'ready' => 90, 'delivered' => 100, default => 0 }; }
+    public function getProgressAttribute(): int
+    {
+        if (array_key_exists('tasks_count', $this->attributes)
+            && array_key_exists('completed_tasks_count', $this->attributes)) {
+            $totalTasks = (int) $this->attributes['tasks_count'];
+            $completedTasks = (int) $this->attributes['completed_tasks_count'];
+        } elseif ($this->relationLoaded('tasks')) {
+            $totalTasks = $this->tasks->count();
+            $completedTasks = $this->tasks->where('status', 'completed')->count();
+        } else {
+            $totalTasks = $this->tasks()->count();
+            $completedTasks = $this->tasks()->where('status', 'completed')->count();
+        }
+
+        if ($totalTasks === 0) {
+            return 0;
+        }
+
+        return min(100, (int) round(($completedTasks / $totalTasks) * 100));
+    }
     public function getBalanceAttribute(): float { return max(0, (float) $this->total - (float) $this->advance); }
 }

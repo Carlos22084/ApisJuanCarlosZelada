@@ -24,6 +24,17 @@ jobs:
       - name: Instalar dependencias
         run: composer install --no-interaction --prefer-dist --no-progress
 
+      - name: Configurar Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+          cache: npm
+
+      - name: Compilar visor 3D
+        run: |
+          npm ci
+          npm run build
+
       - name: Preparar Laravel
         run: |
           cp .env.example .env

@@ -81,6 +81,7 @@ class ResendOrderNotificationTest extends TestCase
         $response = $this->actingAs($client)->post('/cotizacion', [
             'service_id' => $service->id,
             'furniture_type' => 'Sofá personalizado',
+            'quantity' => 1,
             'description' => 'Solicitud creada desde el personalizador para probar Resend.',
             'requested_date' => now()->addWeek()->toDateString(),
         ]);
@@ -103,7 +104,6 @@ class ResendOrderNotificationTest extends TestCase
 
         $this->actingAs($worker)->patch(route('tasks.update', $task), [
             'status' => 'in_progress',
-            'assigned_to' => $worker->id,
         ])->assertRedirect();
 
         Mail::assertSent(OrderNotificationMail::class, fn (OrderNotificationMail $mail) =>
@@ -111,6 +111,46 @@ class ResendOrderNotificationTest extends TestCase
             && $mail->order->status === 'in_progress'
             && $mail->event === 'status_changed'
         );
+    }
+
+    public function test_completing_all_stages_marks_the_order_ready_and_notifies_the_client_once(): void
+    {
+        $worker = User::where('role', 'worker')->firstOrFail();
+        $order = Order::where('status', 'confirmed')->firstOrFail();
+        $tasks = $order->tasks()->get();
+        $payload = $tasks->mapWithKeys(fn ($task) => [
+            $task->id => [
+                'id' => $task->id,
+                'status' => 'completed',
+                'notes' => 'Etapa concluida.',
+            ],
+        ])->all();
+
+        $this->actingAs($worker)
+            ->patch(route('tasks.update-all', $order), ['tasks' => $payload])
+            ->assertRedirect()
+            ->assertSessionHas('success', 'Todas las etapas fueron completadas. El pedido está listo para entregar.');
+
+        $this->assertSame('ready', $order->fresh()->status);
+        $this->assertSame(100, $order->fresh()->progress);
+        $this->assertDatabaseHas('order_status_histories', [
+            'order_id' => $order->id,
+            'user_id' => $worker->id,
+            'status' => 'ready',
+        ]);
+        Mail::assertSent(OrderNotificationMail::class, function (OrderNotificationMail $mail) use ($order) {
+            return $mail->order->is($order)
+                && $mail->order->status === 'ready'
+                && $mail->event === 'status_changed'
+                && $mail->comment === 'El trabajo ha concluido y está listo para entregar.';
+        });
+
+        $this->actingAs($worker)
+            ->patch(route('tasks.update-all', $order), ['tasks' => $payload])
+            ->assertRedirect();
+
+        Mail::assertSent(OrderNotificationMail::class, 1);
+        $this->assertSame(1, $order->history()->where('status', 'ready')->count());
     }
 
     public function test_missing_resend_key_does_not_block_order_creation(): void

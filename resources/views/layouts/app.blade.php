@@ -6,6 +6,8 @@
     <meta name="csrf-token" content="{{ csrf_token() }}">
     <title>@yield('title', 'A&A Multiservicios')</title>
     <link rel="stylesheet" href="{{ asset('css/app.css') }}?v={{ filemtime(public_path('css/app.css')) }}">
+    <link rel="stylesheet" href="{{ asset('css/work-assignments.css') }}?v={{ filemtime(public_path('css/work-assignments.css')) }}">
+    <link rel="stylesheet" href="{{ asset('css/furniture-3d.css') }}?v={{ filemtime(public_path('css/furniture-3d.css')) }}">
 </head>
 @php($isApp = auth()->check() && !request()->routeIs('home','services','customize','tracking','login','register'))
 <body class="{{ $isApp ? 'app-shell' : 'public-shell' }}">
@@ -17,6 +19,7 @@
             <a class="{{ request()->routeIs('orders.*')?'active':'' }}" href="{{ route('orders.index') }}"><span class="nav-icon">▤</span> Pedidos</a>
             @if(auth()->user()->role !== 'client')<a class="{{ request()->routeIs('materials.*')?'active':'' }}" href="{{ route('materials.index') }}"><span class="nav-icon">◆</span> Materiales</a>@endif
             @if(auth()->user()->role === 'admin')
+                <a class="{{ request()->routeIs('workers.*')?'active':'' }}" href="{{ route('workers.index') }}"><span class="nav-icon">♟</span> Trabajadores</a>
                 <a class="{{ request()->routeIs('customers.*')?'active':'' }}" href="{{ route('customers.index') }}"><span class="nav-icon">♙</span> Clientes</a>
                 <a class="{{ request()->routeIs('reports')?'active':'' }}" href="{{ route('reports') }}"><span class="nav-icon">▥</span> Reportes</a>
             @endif
@@ -38,9 +41,9 @@
     <header class="public-nav">
         <a class="brand" href="{{ route('home') }}"><span class="brand-mark">A&A</span><span><strong>Multiservicios</strong><small>Tapicería & diseño</small></span></a>
         <button class="menu-button" data-public-menu>☰</button>
-        <nav data-public-nav><a href="{{ route('home') }}">Inicio</a><a href="{{ route('services') }}">Servicios</a><a href="{{ route('customize') }}">Personalizar</a><a href="{{ route('tracking') }}">Seguimiento</a>@auth<a class="btn btn-outline" href="{{ route('dashboard') }}">Mi panel</a>@else<a class="btn btn-outline" href="{{ route('login') }}">Ingresar</a>@endauth</nav>
+        <nav data-public-nav><a href="{{ route('home') }}">Inicio</a><a href="{{ route('services') }}">Servicios</a><a href="{{ route('customize') }}">Personalizar</a><a href="{{ route('tracking') }}">Seguimiento</a>@auth<a class="btn btn-outline" href="{{ route('dashboard') }}">Mi panel</a>@else<a class="btn btn-outline" href="{{ route('login') }}">Acceso al sistema</a>@endauth</nav>
     </header>
-    @include('partials.alerts')
+    @include('partials.alerts', ['showErrors' => !request()->routeIs('login', 'client.login')])
     <main>@yield('content')</main>
     <footer class="public-footer"><div class="brand"><span class="brand-mark">A&A</span><span><strong>Multiservicios</strong><small>El arte de renovar tus espacios.</small></span></div><div><strong>Contacto</strong><p>Cochabamba, Bolivia · +591 70700001</p></div><div><strong>Horario</strong><p>Lun–Sáb · 08:30 a 18:30</p></div></footer>
 @endif

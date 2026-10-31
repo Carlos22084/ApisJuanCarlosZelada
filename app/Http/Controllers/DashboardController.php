@@ -13,8 +13,29 @@ class DashboardController extends Controller
     {
         $user = Auth::user();
         if ($user->role === 'client') {
-            $orders = Order::with(['service','material'])->where('client_id', $user->id)->latest()->get();
+            $orders = Order::with(['service','material'])
+                ->withCount([
+                    'tasks',
+                    'tasks as completed_tasks_count' => fn ($query) => $query->where('status', 'completed'),
+                ])
+                ->where('client_id', $user->id)
+                ->latest()
+                ->get();
             return view('dashboard.client', compact('orders'));
+        }
+        if ($user->role === 'worker') {
+            $tasks = ProductionTask::with(['order.client', 'order.service'])
+                ->where('assigned_to', $user->id)
+                ->orderByRaw("case status when 'in_progress' then 1 when 'pending' then 2 else 3 end")
+                ->orderBy('sequence')
+                ->get();
+            $stats = [
+                'pending' => $tasks->where('status', 'pending')->count(),
+                'in_progress' => $tasks->where('status', 'in_progress')->count(),
+                'completed' => $tasks->where('status', 'completed')->count(),
+                'orders' => $tasks->pluck('order_id')->unique()->count(),
+            ];
+            return view('dashboard.worker', compact('tasks', 'stats'));
         }
         $stats = [
             'active' => Order::whereNotIn('status', ['delivered','cancelled'])->count(),

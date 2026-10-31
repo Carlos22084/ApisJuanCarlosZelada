@@ -20,11 +20,11 @@ class PublicController extends Controller
 
     public function quote(Request $request, OrderEmailService $emails)
     {
-        if (!Auth::check()) return redirect()->route('login')->with('info', 'Inicie sesión o cree una cuenta para enviar su solicitud personalizada.');
+        if (!Auth::check()) return redirect()->route('client.login')->with('info', 'Inicie sesión o cree una cuenta para enviar su solicitud personalizada.');
         $data = $request->validate([
             'service_id' => ['required','exists:services,id'], 'material_id' => ['nullable','exists:materials,id'],
             'furniture_type' => ['required','string','max:100'], 'style' => ['nullable','string','max:80'],
-            'primary_color' => ['nullable','string','max:50'], 'dimensions' => ['nullable','string','max:100'],
+            'primary_color' => ['nullable','string','max:50'], 'quantity' => ['required','integer','min:1','max:100'],
             'description' => ['required','string','max:1500'], 'requested_date' => ['nullable','date','after_or_equal:today'],
             'ai_design_id' => ['nullable','exists:ai_designs,id'],
         ]);
@@ -33,7 +33,8 @@ class PublicController extends Controller
             $data['reference_image'] = $design->original_path;
         }
         $service = Service::findOrFail($data['service_id']);
-        $order = Order::create([...$data, 'client_id' => Auth::id(), 'code' => 'AYA-'.now()->format('ym').'-'.strtoupper(Str::random(5)), 'subtotal' => $service->base_price, 'total' => $service->base_price]);
+        $estimatedTotal = (float) $service->base_price * (int) $data['quantity'];
+        $order = Order::create([...$data, 'client_id' => Auth::id(), 'code' => 'AYA-'.now()->format('ym').'-'.strtoupper(Str::random(5)), 'subtotal' => $estimatedTotal, 'total' => $estimatedTotal]);
         foreach (['Evaluación y desarmado','Corte de materiales','Costura','Tapizado','Acabado y control de calidad'] as $index => $task) {
             ProductionTask::create(['order_id' => $order->id, 'name' => $task, 'sequence' => $index + 1]);
         }

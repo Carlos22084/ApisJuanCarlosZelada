@@ -11,6 +11,10 @@ class CloudflareImageService
 {
     public function editUpholstery(UploadedFile $image, string $prompt): string
     {
+        // La edición con imagen de referencia puede superar el límite web
+        // predeterminado de 120 segundos en modelos generativos.
+        @set_time_limit(240);
+
         $accountId = trim((string) config('services.cloudflare_ai.account_id'));
         $token = trim((string) config('services.cloudflare_ai.token'));
         $model = trim((string) config('services.cloudflare_ai.model'));
@@ -48,7 +52,11 @@ class CloudflareImageService
                     ]
                 );
         } finally {
-            fclose($stream);
+            // El cliente HTTP puede cerrar el stream multipart al finalizar
+            // la petición. Solo se cierra aquí cuando todavía sigue abierto.
+            if (is_resource($stream)) {
+                fclose($stream);
+            }
             $this->deleteTemporaryFile($temporaryPath);
         }
 

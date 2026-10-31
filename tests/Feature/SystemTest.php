@@ -25,14 +25,75 @@ class SystemTest extends TestCase
 
     public function test_public_pages_and_tracking_are_available(): void
     {
-        $this->get('/')->assertOk()->assertSee('Renovamos tus muebles');
-        $this->get('/personalizar')->assertOk()->assertSee('Imagina tu mueble antes de tapizarlo');
+        $this->get('/')->assertOk()->assertSee('Renovamos tus muebles')->assertSee('¿Eres cliente?');
+        $this->get('/personalizar')->assertOk()
+            ->assertSee('Imagina tu mueble antes de tapizarlo')
+            ->assertSee('Cotización estimada')
+            ->assertSee('Seleccione un tipo')
+            ->assertSee('Silla de comedor')
+            ->assertSee('Sofá de 3 cuerpos');
         $this->get('/seguimiento?code=AYA-2608-K7P2A')->assertOk()->assertSee('Living de 3 piezas');
+    }
+
+    public function test_client_access_is_separate_from_staff_access(): void
+    {
+        $staffAccess = $this->get(route('login'));
+        $staffAccess->assertOk()
+            ->assertSee('Administrador')
+            ->assertSee('Trabajador')
+            ->assertSee("oninvalid=\"this.setCustomValidity('Correo electrónico incorrecto')\"", false)
+            ->assertDontSee('Accesos de demostración');
+
+        $clientAccess = $this->get(route('client.login'));
+        $clientAccess->assertOk()
+            ->assertSee('Acceso para clientes')
+            ->assertSee('Regístrate')
+            ->assertDontSee('Administrador')
+            ->assertDontSee('Trabajador')
+            ->assertDontSee('Accesos de demostración');
+
+        $this->post(route('client.authenticate'), [
+            'email' => 'admin@aya.bo',
+            'password' => 'Admin123!',
+        ])->assertSessionHasErrors('email');
+        $this->assertGuest();
+
+        $client = User::where('email', 'cliente@aya.bo')->firstOrFail();
+        $this->post(route('client.authenticate'), [
+            'email' => 'cliente@aya.bo',
+            'password' => 'Cliente123!',
+        ])->assertRedirect(route('dashboard'));
+        $this->assertAuthenticatedAs($client);
+    }
+
+    public function test_login_errors_are_displayed_inside_the_credentials_card(): void
+    {
+        $this->from(route('login'))->post(route('login'), [
+            'role' => 'admin',
+            'email' => 'admin@aya.bo',
+            'password' => 'contraseña-incorrecta',
+        ])->assertRedirect(route('login'));
+
+        $response = $this->get(route('login'));
+        $response->assertOk()
+            ->assertSee('No se pudo iniciar sesión:')
+            ->assertSee('Los datos ingresados no son correctos o la cuenta está inactiva.');
+
+        $html = $response->getContent();
+        $formStartsAt = strpos($html, '<form class="auth-card"');
+        $errorStartsAt = strpos($html, 'No se pudo iniciar sesión:');
+        $formEndsAt = strpos($html, '</form>', $formStartsAt);
+
+        $this->assertNotFalse($formStartsAt);
+        $this->assertNotFalse($errorStartsAt);
+        $this->assertNotFalse($formEndsAt);
+        $this->assertGreaterThan($formStartsAt, $errorStartsAt);
+        $this->assertLessThan($formEndsAt, $errorStartsAt);
     }
 
     public function test_admin_can_log_in_and_view_management_dashboard(): void
     {
-        $this->post('/ingresar', ['email' => 'admin@aya.bo', 'password' => 'Admin123!'])
+        $this->post('/ingresar', ['role' => 'admin', 'email' => 'admin@aya.bo', 'password' => 'Admin123!'])
             ->assertRedirect('/panel');
         $this->get('/panel')->assertOk()->assertSee('Resumen del taller');
         $this->get('/clientes')->assertOk()->assertSee('Gestión de clientes');
@@ -47,6 +108,29 @@ class SystemTest extends TestCase
         $this->actingAs($client)->get('/materiales')->assertForbidden();
         $this->actingAs($client)->get('/panel')->assertOk()->assertSee('Mis pedidos');
         $this->actingAs($client)->get('/pedidos/1')->assertOk()->assertSee('Resumen económico');
+    }
+
+    public function test_admin_can_view_worker_assignments_and_client_orders(): void
+    {
+        $admin = User::where('role', 'admin')->firstOrFail();
+        $worker = User::where('role', 'worker')->whereHas('assignedTasks')->firstOrFail();
+        $assignedOrder = $worker->assignedTasks()->with('order')->firstOrFail()->order;
+        $client = User::where('role', 'client')->whereHas('orders')->firstOrFail();
+        $clientOrder = $client->orders()->firstOrFail();
+
+        $this->actingAs($admin)
+            ->get(route('workers.index'))
+            ->assertOk()
+            ->assertSee('Ver trabajos')
+            ->assertSee('Trabajos asignados a '.$worker->name)
+            ->assertSee($assignedOrder->code);
+
+        $this->actingAs($admin)
+            ->get(route('customers.index'))
+            ->assertOk()
+            ->assertSee('Ver pedidos')
+            ->assertSee('Pedidos de '.$client->name)
+            ->assertSee($clientOrder->code);
     }
 
     public function test_admin_can_create_an_order_with_production_stages(): void
@@ -104,6 +188,10 @@ class SystemTest extends TestCase
         $response->assertJsonPath('image_url', route('customize.ai.image', $design, false));
         Storage::disk('public')->assertExists($design->original_path);
         Storage::disk('public')->assertExists($design->generated_path);
+        $this->actingAs($client)
+            ->get(route('customize.ai.original', $design))
+            ->assertOk()
+            ->assertHeader('content-type', 'image/png');
         $this->actingAs($client)
             ->get(route('customize.ai.image', $design))
             ->assertOk()

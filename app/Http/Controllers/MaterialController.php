@@ -14,5 +14,25 @@ class MaterialController extends Controller
     }
     public function store(Request $request) { Material::create($this->validated($request)); return back()->with('success','Material registrado.'); }
     public function update(Request $request, Material $material) { $material->update($this->validated($request)); return back()->with('success','Inventario actualizado.'); }
-    private function validated(Request $request): array { return $request->validate(['name'=>['required','string','max:100'],'category'=>['required','string','max:60'],'color'=>['required','string','max:50'],'color_hex'=>['required','regex:/^#[0-9A-Fa-f]{6}$/'],'unit'=>['required','string','max:30'],'stock'=>['required','numeric','min:0'],'minimum_stock'=>['required','numeric','min:0'],'unit_price'=>['required','numeric','min:0'],'active'=>['nullable','boolean']]); }
+    private function validated(Request $request): array
+    {
+        $data = $request->validate([
+            'name' => ['required', 'string', 'max:100'],
+            'category' => ['required', 'string', 'max:60'],
+            'color' => ['required', 'string', 'max:50'],
+            'visual_color' => ['required', 'regex:/^#[0-9A-Fa-f]{6}$/'],
+            'unit' => ['required', 'string', 'max:30'],
+            'stock' => ['required', 'numeric', 'min:0'],
+            'minimum_stock' => ['required', 'numeric', 'min:0'],
+            'unit_price' => ['required', 'numeric', 'min:0'],
+            'active' => ['nullable', 'boolean'],
+        ], [], [
+            'visual_color' => 'color visual',
+        ]);
+
+        $data['color_hex'] = $data['visual_color'];
+        unset($data['visual_color']);
+
+        return $data;
+    }
 }

@@ -136,3 +136,16 @@ La configuración, matriz de casos y análisis se documentan en `docs/PRUEBAS_AU
 ## Nota sobre inteligencia artificial
 
 La primera versión implementa un asistente inteligente basado en reglas y conocimiento del negocio, sin depender de una API ni generar costos. La arquitectura permite reemplazarlo posteriormente por un modelo externo conservando la misma interfaz.
+
+## Publicación gratuita
+
+El repositorio incluye `Dockerfile` y `render.yaml` para desplegar Laravel en Render. La arquitectura recomendada para la demostración académica utiliza:
+
+- Render Free para ejecutar la aplicación.
+- TiDB Cloud Starter en modo compatible con MySQL para conservar la base de datos.
+- Cloudflare R2 para conservar fotografías y propuestas visuales entre reinicios.
+- Variables protegidas en el panel de Render; el archivo `.env` nunca se publica.
+
+[Desplegar en Render](https://render.com/deploy?repo=https://github.com/Carlos22084/ApisJuanCarlosZelada)
+
+El procedimiento completo, las variables requeridas y el material para la defensa se encuentran en [`docs/PUBLICACION_HOSTING_GRATUITO.md`](docs/PUBLICACION_HOSTING_GRATUITO.md).

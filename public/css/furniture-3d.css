@@ -1,0 +1,16 @@
+.furniture-3d-stage{background:linear-gradient(160deg,#f9f3ec,#ddc6b0);cursor:grab;isolation:isolate}
+.furniture-3d-stage:active{cursor:grabbing}
+.furniture-3d-canvas,.furniture-3d-canvas canvas{position:absolute;inset:0;width:100%!important;height:100%!important;display:block}
+.furniture-3d-overlay{position:absolute;z-index:3;top:13px;left:14px;display:flex;flex-direction:column;align-items:flex-start;pointer-events:none;text-shadow:0 1px 12px rgba(255,255,255,.8)}
+.furniture-3d-overlay span{padding:4px 7px;border:1px solid rgba(111,72,46,.18);border-radius:20px;background:rgba(255,250,245,.78);backdrop-filter:blur(8px);font-size:7px;font-weight:900;letter-spacing:1.4px;color:#855539}
+.furniture-3d-overlay strong{margin-top:5px;font:700 12px Georgia,serif;color:#4f3324}
+.furniture-3d-overlay small{font-size:8px;color:#826b5d}
+.furniture-3d-actions{position:absolute;z-index:4;right:11px;bottom:11px;display:flex;gap:6px}
+.furniture-3d-actions button{padding:7px 9px;border:1px solid rgba(92,59,38,.18);border-radius:8px;background:rgba(255,252,248,.86);color:#654633;font-size:8px;font-weight:800;box-shadow:0 4px 14px rgba(67,39,22,.10);backdrop-filter:blur(8px);cursor:pointer}
+.furniture-3d-actions button:hover,.furniture-3d-actions button[aria-pressed="true"]{background:#70432c;color:#fff}
+.furniture-3d-loading{position:absolute;z-index:6;inset:0;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:9px;background:radial-gradient(circle,#fff9f2,#e8d3c0);color:#65432e;font-size:11px;transition:opacity .35s}
+.furniture-3d-loading.ready{opacity:0;pointer-events:none}
+.furniture-3d-loading span{width:34px;height:34px;border:3px solid rgba(121,76,47,.16);border-top-color:#805036;border-radius:50%;animation:furniture3dSpin .8s linear infinite}
+.furniture-3d-fallback{position:absolute;inset:0;display:grid;place-items:center;padding:35px;text-align:center;color:#704b34;font-size:11px}
+@keyframes furniture3dSpin{to{transform:rotate(360deg)}}
+@media(max-width:520px){.furniture-3d-overlay strong{max-width:180px}.furniture-3d-actions{left:10px;right:auto}.furniture-3d-actions button{padding:7px;font-size:7px}}

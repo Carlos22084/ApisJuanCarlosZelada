@@ -60,4 +60,9 @@ class User extends Authenticatable
     {
         return $this->hasMany(ProductionTask::class, 'assigned_to');
     }
+
+    public function furniture3dModels()
+    {
+        return $this->hasMany(Furniture3dModel::class);
+    }
 }

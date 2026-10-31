@@ -18,8 +18,18 @@ if(aiStudio){
   const tabs=[...document.querySelectorAll('[data-preview-tab]')],panels=[...document.querySelectorAll('[data-preview-panel]')];
   const showPanel=name=>{tabs.forEach(t=>t.classList.toggle('active',t.dataset.previewTab===name));panels.forEach(p=>p.hidden=p.dataset.previewPanel!==name)};
   tabs.forEach(tab=>tab.addEventListener('click',()=>{if(!tab.disabled)showPanel(tab.dataset.previewTab)}));
-  document.querySelector('#modelRotation')?.addEventListener('input',e=>document.querySelector('#modelSofa').style.transform=`rotateY(${e.target.value}deg) rotateX(-2deg)`);
   const material=document.querySelector('#material_id'),color=document.querySelector('#primary_color'),photo=document.querySelector('#furniture_photo');
+  const service=document.querySelector('#service_id'),quantity=document.querySelector('#furniture_quantity');
+  const money=new Intl.NumberFormat('es-BO',{minimumFractionDigits:2,maximumFractionDigits:2});
+  const updateQuoteEstimate=()=>{
+    const serviceOption=service?.options[service.selectedIndex],materialOption=material?.options[material.selectedIndex];
+    const unitPrice=Number(serviceOption?.dataset.price||0),amount=Math.max(1,Number.parseInt(quantity?.value||'1',10)||1);
+    document.querySelector('#quoteService').textContent=serviceOption?.value?(serviceOption.dataset.name||serviceOption.textContent.trim()):'Por seleccionar';
+    document.querySelector('#quoteMaterial').textContent=materialOption?.value?(materialOption.dataset.name||materialOption.textContent.trim()):'Por seleccionar';
+    document.querySelector('#quoteUnitPrice').textContent=`Bs ${money.format(unitPrice)}`;
+    document.querySelector('#quoteQuantity').textContent=String(amount);
+    document.querySelector('#quoteTotal').textContent=`Bs ${money.format(unitPrice*amount)}`;
+  };
   const prepareAiPhoto=file=>new Promise((resolve,reject)=>{
     const image=new Image(),url=URL.createObjectURL(file);
     image.onload=()=>{
@@ -32,21 +42,46 @@ if(aiStudio){
     };
     image.onerror=()=>{URL.revokeObjectURL(url);reject(new Error('La fotografía seleccionada no es válida.'))};image.src=url;
   });
-  document.querySelectorAll('[data-material-card]').forEach(card=>{
-    card.addEventListener('click',()=>{
-      document.querySelectorAll('[data-material-card]').forEach(x=>x.classList.remove('selected'));
-      card.classList.add('selected');material.value=card.dataset.materialId;color.value=card.dataset.color||'';
-      document.documentElement.style.setProperty('--preview-color',card.dataset.hex||'#9a6644');
-      document.querySelectorAll('.color-choice[data-color]').forEach(x=>x.classList.toggle('selected',x.dataset.color===card.dataset.color));
+  const applySelectedMaterial=()=>{
+      const option=material.options[material.selectedIndex],preview=document.querySelector('#materialPreview'),previewPhoto=document.querySelector('#materialPreviewPhoto');
+      const colorButtons=[...document.querySelectorAll('.color-choice[data-material-id]')];
+      if(!option?.value){preview.hidden=true;colorButtons.forEach(button=>button.hidden=true);document.querySelector('#materialHelp').textContent='Selecciona una opción para visualizar el material y aplicarlo al modelo.';return}
+      const selectedColor=option.dataset.color||'',selectedHex=option.dataset.hex||'#9a6644',textureType=option.dataset.texture||'leather';
+      color.value=selectedColor;
+      document.documentElement.style.setProperty('--preview-color',selectedHex);
+      colorButtons.forEach(button=>{button.hidden=button.dataset.materialName!==option.dataset.name;button.classList.toggle('selected',button.dataset.materialId===option.value)});
       let texture='repeating-linear-gradient(90deg,rgba(255,255,255,.08) 0 1px,transparent 1px 4px)';
-      if(card.classList.contains('velvet'))texture='linear-gradient(115deg,rgba(255,255,255,.22),transparent 38%,rgba(0,0,0,.12) 72%,rgba(255,255,255,.08))';
-      if(card.classList.contains('linen'))texture='repeating-linear-gradient(45deg,rgba(255,255,255,.11) 0 1px,transparent 1px 4px),repeating-linear-gradient(-45deg,rgba(0,0,0,.05) 0 1px,transparent 1px 5px)';
-      if(card.classList.contains('leather'))texture='radial-gradient(circle at 25% 35%,rgba(255,255,255,.18) 0 1px,transparent 2px),linear-gradient(120deg,rgba(255,255,255,.12),transparent 40%,rgba(0,0,0,.10))';
+      if(textureType==='velvet')texture='linear-gradient(115deg,rgba(255,255,255,.22),transparent 38%,rgba(0,0,0,.12) 72%,rgba(255,255,255,.08))';
+      if(textureType==='linen')texture='repeating-linear-gradient(45deg,rgba(255,255,255,.11) 0 1px,transparent 1px 4px),repeating-linear-gradient(-45deg,rgba(0,0,0,.05) 0 1px,transparent 1px 5px)';
+      if(textureType==='leather')texture='radial-gradient(circle at 25% 35%,rgba(255,255,255,.18) 0 1px,transparent 2px),linear-gradient(120deg,rgba(255,255,255,.12),transparent 40%,rgba(0,0,0,.10))';
+      if(textureType==='boucle')texture='radial-gradient(circle,rgba(255,255,255,.22) 0 2px,rgba(0,0,0,.10) 3px,transparent 4px) 0 0/9px 9px';
+      if(textureType==='microfiber')texture='linear-gradient(120deg,rgba(255,255,255,.20),transparent 42%,rgba(0,0,0,.08))';
+      if(textureType==='jacquard')texture='repeating-linear-gradient(45deg,rgba(255,255,255,.18) 0 3px,rgba(0,0,0,.08) 3px 6px)';
+      if(textureType==='polyester')texture='repeating-linear-gradient(90deg,rgba(255,255,255,.12) 0 1px,transparent 1px 3px),repeating-linear-gradient(0deg,rgba(0,0,0,.05) 0 1px,transparent 1px 3px)';
       document.documentElement.style.setProperty('--fabric-pattern',texture);
-      document.querySelector('#materialHelp').textContent=`Seleccionado: ${card.querySelector('strong').textContent} · ${card.dataset.color}`;
-    });
+      previewPhoto.style.setProperty('--sample-color',selectedHex);
+      preview.className=`material-preview ${textureType}`;
+      document.querySelector('#materialPreviewName').textContent=option.dataset.name;
+      document.querySelector('#materialPreviewDetails').textContent=`${option.dataset.category} · ${selectedColor}`;
+      document.querySelector('#materialHelp').textContent='Material seleccionado para la propuesta de tapizado.';
+      preview.hidden=false;
+  };
+  material.addEventListener('change',()=>{applySelectedMaterial();updateQuoteEstimate()});
+  document.querySelectorAll('.color-choice[data-material-id]').forEach(button=>button.addEventListener('click',()=>{material.value=button.dataset.materialId;material.dispatchEvent(new Event('change'))}));
+  service?.addEventListener('change',updateQuoteEstimate);
+  quantity?.addEventListener('input',updateQuoteEstimate);
+  applySelectedMaterial();
+  updateQuoteEstimate();
+  let uploadedPhotoUrl;
+  photo?.addEventListener('change',()=>{
+    const file=photo.files[0],preview=document.querySelector('#originalPreview'),empty=document.querySelector('#emptyPhoto');
+    if(!file)return;
+    if(uploadedPhotoUrl)URL.revokeObjectURL(uploadedPhotoUrl);
+    uploadedPhotoUrl=URL.createObjectURL(file);
+    preview.src=uploadedPhotoUrl;preview.hidden=false;empty.hidden=true;
+    document.querySelector('.upload-zone strong').textContent=file.name;
+    applySelectedMaterial();showPanel('photo');
   });
-  photo?.addEventListener('change',()=>{const file=photo.files[0],preview=document.querySelector('#originalPreview'),empty=document.querySelector('#emptyPhoto');if(!file)return;preview.src=URL.createObjectURL(file);preview.hidden=false;empty.hidden=true;document.querySelector('.upload-zone strong').textContent=file.name;showPanel('photo')});
   document.querySelector('#generateAi')?.addEventListener('click',async()=>{
     const button=document.querySelector('#generateAi'),status=document.querySelector('#aiStatus'),processing=document.querySelector('#aiProcessing'),result=document.querySelector('#aiResult');
     const file=photo.files[0],furniture=document.querySelector('#furniture_type').value.trim();
@@ -67,7 +102,8 @@ if(aiStudio){
       }
       if(!response.ok)throw new Error(payload.message||Object.values(payload.errors||{})[0]?.[0]||'No se pudo generar la imagen.');
       await new Promise((resolve,reject)=>{result.onload=resolve;result.onerror=()=>reject(new Error('La propuesta fue generada, pero el navegador no pudo mostrar el archivo.'));result.src=payload.image_url+'?v='+Date.now()});
-      processing.hidden=true;document.querySelector('#ai_design_id').value=payload.design_id;status.textContent=status.textContent.includes('recuperado')?status.textContent:'✓ Diseño generado y vinculado a tu solicitud.';status.className='ai-status success';
+      window.dispatchEvent(new CustomEvent('ai-design-ready',{detail:{image:result}}));
+      processing.hidden=true;document.querySelector('#ai_design_id').value=payload.design_id;status.textContent=status.textContent.includes('recuperado')?status.textContent:'✓ Diseño generado y aplicado a la vista 3D.';status.className='ai-status success';
     }
     catch(error){processing.hidden=true;showPanel('photo');status.textContent=error.message;status.className='ai-status error'}finally{button.disabled=false;button.innerHTML='✦ Generar otra propuesta con IA'}
   });

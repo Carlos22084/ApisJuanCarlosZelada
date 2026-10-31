@@ -8,17 +8,39 @@ use Illuminate\Validation\Rules\Password;
 
 class AuthController extends Controller
 {
-    public function login() { return view('auth.login'); }
+    public function login() { return view('auth.login', ['clientAccess' => false]); }
+    public function clientLogin() { return view('auth.login', ['clientAccess' => true]); }
     public function register() { return view('auth.register'); }
 
     public function authenticate(Request $request)
     {
-        $credentials = $request->validate(['email' => ['required','email'], 'password' => ['required']]);
+        $credentials = $request->validate([
+            'role' => ['required', 'in:admin,worker'],
+            'email' => ['required','email'],
+            'password' => ['required'],
+        ]);
         if (Auth::attempt([...$credentials, 'active' => true], $request->boolean('remember'))) {
             $request->session()->regenerate();
             return redirect()->intended(route('dashboard'))->with('success', 'Bienvenido al sistema.');
         }
-        return back()->withErrors(['email' => 'Los datos ingresados no son correctos o la cuenta está inactiva.'])->onlyInput('email');
+        return back()->withErrors(['email' => 'Los datos ingresados no son correctos o la cuenta está inactiva.'])->onlyInput('email', 'role');
+    }
+
+    public function clientAuthenticate(Request $request)
+    {
+        $credentials = $request->validate([
+            'email' => ['required', 'email'],
+            'password' => ['required'],
+        ]);
+
+        if (Auth::attempt([...$credentials, 'role' => 'client', 'active' => true], $request->boolean('remember'))) {
+            $request->session()->regenerate();
+            return redirect()->intended(route('dashboard'))->with('success', 'Bienvenido a tu cuenta.');
+        }
+
+        return back()
+            ->withErrors(['email' => 'Los datos ingresados no son correctos o la cuenta está inactiva.'])
+            ->onlyInput('email');
     }
 
     public function store(Request $request)
@@ -41,4 +63,5 @@ class AuthController extends Controller
         $request->session()->regenerateToken();
         return redirect()->route('home');
     }
+
 }

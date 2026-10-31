@@ -36,9 +36,10 @@ class AiDesignController extends Controller
         try {
             $binary = $imageService->editUpholstery($request->file('furniture_photo'), $prompt);
             $token = now()->format('YmdHis').'-'.Str::lower(Str::random(8));
-            $originalPath = $request->file('furniture_photo')->storeAs('designs/originals', $token.'.'.$request->file('furniture_photo')->extension(), 'public');
+            $disk = $this->designsDisk();
+            $originalPath = $request->file('furniture_photo')->storeAs('designs/originals', $token.'.'.$request->file('furniture_photo')->extension(), $disk);
             $generatedPath = 'designs/generated/'.$token.'.'.$this->imageExtension($binary);
-            Storage::disk('public')->put($generatedPath, $binary);
+            Storage::disk($disk)->put($generatedPath, $binary);
             $design = AiDesign::create([
                 'user_id' => $request->user()->id,
                 'material_id' => $material->id,
@@ -62,15 +63,27 @@ class AiDesignController extends Controller
 
     public function image(Request $request, AiDesign $aiDesign)
     {
-        abort_unless(
-            $aiDesign->user_id === $request->user()->id || $request->user()->role === 'admin',
-            403
-        );
+        $this->authorizeDesign($request, $aiDesign);
+        $disk = Storage::disk($this->designsDisk());
 
-        abort_unless(Storage::disk('public')->exists($aiDesign->generated_path), 404);
+        abort_unless($disk->exists($aiDesign->generated_path), 404);
 
-        return Storage::disk('public')->response(
+        return $disk->response(
             $aiDesign->generated_path,
+            null,
+            ['Cache-Control' => 'private, no-store, max-age=0']
+        );
+    }
+
+    public function original(Request $request, AiDesign $aiDesign)
+    {
+        $this->authorizeDesign($request, $aiDesign);
+        $disk = Storage::disk($this->designsDisk());
+
+        abort_unless($disk->exists($aiDesign->original_path), 404);
+
+        return $disk->response(
+            $aiDesign->original_path,
             null,
             ['Cache-Control' => 'private, no-store, max-age=0']
         );
@@ -83,7 +96,7 @@ class AiDesignController extends Controller
             ->latest('id')
             ->first();
 
-        if (! $design || ! Storage::disk('public')->exists($design->generated_path)) {
+        if (! $design || ! Storage::disk($this->designsDisk())->exists($design->generated_path)) {
             return response()->json(['message' => 'No se encontró una propuesta reciente.'], 404);
         }
 
@@ -104,5 +117,21 @@ class AiDesignController extends Controller
             'image/webp' => 'webp',
             default => throw new \RuntimeException('Cloudflare devolvió un formato de imagen no compatible.'),
         };
+    }
+
+    private function designsDisk(): string
+    {
+        return config('filesystems.designs_disk', 'public');
+    }
+
+    private function authorizeDesign(Request $request, AiDesign $aiDesign): void
+    {
+        $user = $request->user();
+        $canView = $aiDesign->user_id === $user->id
+            || $user->role === 'admin'
+            || ($user->role === 'worker'
+                && $aiDesign->order?->tasks()->where('assigned_to', $user->id)->exists());
+
+        abort_unless($canView, 403);
     }
 }
